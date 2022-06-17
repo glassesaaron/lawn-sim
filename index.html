@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>LawnSim</title>
+    <style>
+    	* { background: #000000; padding: 0; margin: 0; }
+    	canvas { background: #FFFFFF; display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas_1" width="1920" height="1080"></canvas>
+
+<script>
+
+    // taken from: https://stackoverflow.com/questions/5560248/programmatically-lighten-or-darken-a-hex-color-or-rgb-and-blend-colors
+    const pSBC=(p,c0,c1,l)=>{
+        let r,g,b,P,f,t,h,i=parseInt,m=Math.round,a=typeof(c1)=="string";
+        if(typeof(p)!="number"||p<-1||p>1||typeof(c0)!="string"||(c0[0]!='r'&&c0[0]!='#')||(c1&&!a))return null;
+        if(!this.pSBCr)this.pSBCr=(d)=>{
+            let n=d.length,x={};
+            if(n>9){
+                [r,g,b,a]=d=d.split(","),n=d.length;
+                if(n<3||n>4)return null;
+                x.r=i(r[3]=="a"?r.slice(5):r.slice(4)),x.g=i(g),x.b=i(b),x.a=a?parseFloat(a):-1
+            }else{
+                if(n==8||n==6||n<4)return null;
+                if(n<6)d="#"+d[1]+d[1]+d[2]+d[2]+d[3]+d[3]+(n>4?d[4]+d[4]:"");
+                d=i(d.slice(1),16);
+                if(n==9||n==5)x.r=d>>24&255,x.g=d>>16&255,x.b=d>>8&255,x.a=m((d&255)/0.255)/1000;
+                else x.r=d>>16,x.g=d>>8&255,x.b=d&255,x.a=-1
+            }return x};
+        h=c0.length>9,h=a?c1.length>9?true:c1=="c"?!h:false:h,f=this.pSBCr(c0),P=p<0,t=c1&&c1!="c"?this.pSBCr(c1):P?{r:0,g:0,b:0,a:-1}:{r:255,g:255,b:255,a:-1},p=P?p*-1:p,P=1-p;
+        if(!f||!t)return null;
+        if(l)r=m(P*f.r+p*t.r),g=m(P*f.g+p*t.g),b=m(P*f.b+p*t.b);
+        else r=m((P*f.r**2+p*t.r**2)**0.5),g=m((P*f.g**2+p*t.g**2)**0.5),b=m((P*f.b**2+p*t.b**2)**0.5);
+        a=f.a,t=t.a,f=a>=0||t>=0,a=f?a<0?t:t<0?a:a*P+t*p:0;
+        if(h)return"rgb"+(f?"a(":"(")+r+","+g+","+b+(f?","+m(a*1000)/1000:"")+")";
+        else return"#"+(4294967296+r*16777216+g*65536+b*256+(f?m(a*255):0)).toString(16).slice(1,f?undefined:-2)
+    }
+
+    class Grass {
+        constructor(x, y, width, height, state) {
+            this.x = x;
+            this.y = y;
+            this.height = height;
+            this.width = width;
+            this.maxFood = 25000;
+            this.food = 25000;
+            this.maxWater = 5000;
+            this.water = 5000;
+            this.state = state;
+        }
+
+        tick(){
+            if(this.water > 0){
+                this.water--;
+            }
+            if(this.food > 0){
+                this.food--;
+            }
+        }
+
+        draw(ctx){
+            let grassColor = '#008000';
+            let dirtColor = '#A52A2A';
+
+            switch(this.state){
+                case 0:
+                    // seed
+                    break;
+                case 1:
+                    // baby grass
+                    break;
+                default:
+                    // adult grass
+                    let grassLife = (this.water/this.maxWater)-1;
+                    ctx.beginPath();
+                    ctx.fillStyle = pSBC(grassLife, grassColor, dirtColor);
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    ctx.stroke();
+            }
+        }
+    }
+
+    let gameObject = {
+        width: 800,
+        height: 800,
+        tileWidth: 20,
+        tileHeight: 20,
+        running: true,
+        debug: true,
+        lastRender: new Date()-10, // offset initial start
+        fps: 0,
+        targetFps: 60,
+    }
+
+    let world = {
+        grass: [],
+        day: 0,
+        minute: 0,
+        watering: false,
+        waterGrass: function(x, y, radius){
+            let water = {
+                x: x-Math.round(radius/2),
+                y: y-Math.round(radius/2),
+                width: Math.round(radius*2),
+                height: Math.round(radius*2),
+            }
+            for(let grass of world.grass){
+                let collision = checkCollision(water, grass);
+                if(collision){
+                    grass.water = grass.maxWater;
+                }
+            }
+        }
+    }
+
+    let checkCollision = function(obj1, obj2){
+        return (obj1.x < obj2.x + obj2.width &&
+        obj1.x + obj1.width > obj2.x &&
+        obj1.y < obj2.y + obj2.height &&
+        obj1.height + obj1.y > obj2.y);
+    }
+
+	let doLogic = function(){
+        for(let grass of world.grass){
+            grass.tick();
+        }
+        world.minute += 5;
+        if(world.minute > 1440){
+            world.day++;
+            world.minute = 0;
+        }
+
+        if(gameObject.running){
+            setTimeout(doLogic, 1000 / gameObject.targetFps);
+        }
+    }
+    
+    let doRender = function(){
+        // call setTimeout first to increase accuracy
+        if(gameObject.running){
+            //window.requestAnimationFrame(doRender);
+            setTimeout(doRender, 1000 / gameObject.targetFps);
+        }
+
+        var canvas = document.getElementById('canvas_1');
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // draw the grass
+        for(let grass of world.grass){
+            grass.draw(ctx);
+        }
+
+        // draw the world timer
+        ctx.font = '20px Arial';
+        ctx.fillStyle = '#000000';
+        let hours = Math.floor(world.minute*0.016666);
+        let minutes = world.minute - (hours*60);
+        if(hours<10){
+            hours = '0' + hours;
+        }
+        ctx.fillText(`${world.day} ${hours}:${minutes}`, Math.round(gameObject.width / 2) - 40, 20);
+
+        // draw the fps
+        if(gameObject.debug){
+            let currentRender = new Date();
+            let fps = Math.round(1000 / (currentRender - gameObject.lastRender),2);
+            fps = Math.round((fps * 0.1) + (gameObject.fps * (0.9)),2);
+            gameObject.lastRender = currentRender;
+            gameObject.fps = fps;
+            ctx.font = '10px Arial';
+            ctx.fillStyle = '#000000';
+            ctx.fillText(`FPS: ${fps}`, gameObject.width - 60, 20);
+        }
+
+        if(!gameObject.running){
+            ctx.globalAlpha = 0.2;
+            ctx.fillRect(0,0,gameObject.width,gameObject.height);
+            ctx.globalAlpha = 1.0;
+            ctx.font = '20px Arial';
+            ctx.fillStyle = '#000000';
+            ctx.fillText(`PAUSED`, Math.round(gameObject.width / 2) - 50, Math.round(gameObject.height / 2) - 100);
+        }
+    }
+
+    document.addEventListener('keydown', function(event) {
+        switch(event.keyCode){
+            case 80:
+                gameObject.running = !gameObject.running;
+                if(gameObject.running){
+                    doLogic();
+                    doRender();
+                }
+                break;
+            default:
+                // n/a
+        }
+    });
+
+    document.addEventListener('mousedown', (event) => {
+        if(gameObject.running){
+            gameObject.watering = true;
+        }
+    });
+
+    document.addEventListener('mouseup', (event) => {
+        if(gameObject.running){
+            gameObject.watering = false;
+        }
+    });
+
+    document.addEventListener('mousemove', (event) => {
+        if(gameObject.running && gameObject.watering){
+            world.waterGrass(event.clientX, event.clientY, 50);
+        }
+    });
+
+    async function runAll(){
+        
+        // build all grass
+        for(let y=0; y<gameObject.height; y+=gameObject.tileHeight){
+            for(let x=0; x<gameObject.width; x+=gameObject.tileWidth){
+                world.grass.push(new Grass(x,y, gameObject.tileWidth, gameObject.tileHeight, 2));
+            }
+        }
+
+        doLogic();
+        doRender();
+
+        //auto-pause at start
+        //setTimeout(function(){ gameObject.running = false; }, 500);
+    };
+    runAll();
+
+</script>
+
+</body>
+</html>
